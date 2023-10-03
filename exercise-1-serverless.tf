@@ -175,3 +175,66 @@ resource "aws_iam_role_policy_attachment" "attach-apigateway-cloudwatchlogs" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonAPIGatewayPushToCloudWatchLogs"
 }
 
+# Task 2: Creating a DynamoDB table
+resource "aws_dynamodb_table" "orders" {
+  name             = "orders"
+  hash_key         = "orderID"
+  billing_mode     = "PAY_PER_REQUEST"
+  stream_enabled   = true
+  stream_view_type = "NEW_AND_OLD_IMAGES"
+
+  attribute {
+    name = "orderID"
+    type = "S"
+  }
+}
+
+# Task 3: Creating an SQS queue
+
+resource "aws_sqs_queue" "POC-Queue" {
+  name                      = "POC-Queue"
+}
+
+resource "aws_sqs_queue_policy" "send_messages_policy" {
+  queue_url = aws_sqs_queue.POC-Queue.id
+
+  policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Sid       = "SendMessages",
+        Effect    = "Allow",
+        Principal = "*",
+        Action    = "sqs:SendMessage",
+        Resource  = aws_sqs_queue.POC-Queue.arn,
+        Condition = {
+          ArnEquals = {
+            "aws:SourceArn" = aws_iam_role.apigateway-sqs.arn
+          }
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_sqs_queue_policy" "receive_messages_policy" {
+  queue_url = aws_sqs_queue.POC-Queue.id
+
+  policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Sid       = "ReceiveMessages",
+        Effect    = "Allow",
+        Principal = "*",
+        Action    = "sqs:ReceiveMessage",
+        Resource  = aws_sqs_queue.POC-Queue.arn,
+        Condition = {
+          ArnEquals = {
+            "aws:SourceArn" = aws_iam_role.lambda-sqs-dynamodb.arn
+          }
+        }
+      }
+    ]
+  })
+}
